@@ -34,67 +34,48 @@ let cachedCredentials: any = null;
 function getCredentials() {
   if (cachedCredentials) return cachedCredentials;
 
-  const rawKey = process.env.GOOGLE_PRIVATE_KEY;
-  let privateKey = rawKey?.trim();
-  let clientEmail = process.env.GOOGLE_CLIENT_EMAIL?.trim();
-  let projectId = process.env.GOOGLE_PROJECT_ID?.trim();
+  let privateKey = (process.env.GOOGLE_PRIVATE_KEY || "").trim();
+  let clientEmail = (process.env.GOOGLE_CLIENT_EMAIL || "").trim();
+  let projectId = (process.env.GOOGLE_PROJECT_ID || "").trim();
+  const sheetId = (process.env.GOOGLE_SHEET_ID || "").trim();
 
-  function tryParseJson(str: string | undefined) {
-    if (!str) return null;
-    const cleaned = str.trim().replace(/^["']|["']$/g, '').trim();
-    if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
-      try {
-        return JSON.parse(cleaned);
-      } catch {
-        return null;
-      }
+  // 1. Strip surrounding quotes if present
+  privateKey = privateKey.replace(/^["']|["']$/g, '');
+  clientEmail = clientEmail.replace(/^["']|["']$/g, '');
+  projectId = projectId.replace(/^["']|["']$/g, '');
+
+  // 2. Handle case where the entire JSON was pasted into GOOGLE_PRIVATE_KEY
+  if (privateKey.startsWith('{')) {
+    try {
+      const json = JSON.parse(privateKey);
+      if (json.private_key) privateKey = json.private_key;
+      if (json.client_email && !clientEmail) clientEmail = json.client_email;
+      if (json.project_id && !projectId) projectId = json.project_id;
+    } catch (e) {
+      console.error("Failed to parse GOOGLE_PRIVATE_KEY as JSON:", e);
     }
-    return null;
   }
 
-  const keyJson = tryParseJson(privateKey);
-  const emailJson = tryParseJson(clientEmail);
-  const finalJson = keyJson || emailJson;
-
-  if (finalJson) {
-    if (finalJson.private_key) privateKey = finalJson.private_key;
-    if (finalJson.client_email) clientEmail = finalJson.client_email;
-    if (finalJson.project_id) projectId = finalJson.project_id;
-  }
-
-  function cleanCredential(val: string | undefined): string | undefined {
-    if (!val) return val;
-    let cleaned = val.trim();
-    const prefixMatch = cleaned.match(/^(?:export\s+)?(?:GOOGLE_[A-Z_]+|client_email|project_id|private_key)\s*[=:]\s*/i);
-    if (prefixMatch) {
-      cleaned = cleaned.substring(prefixMatch[0].length).trim();
-    }
-    while (cleaned.startsWith('"') || cleaned.startsWith("'") || cleaned.endsWith('"') || cleaned.endsWith("'")) {
-      cleaned = cleaned.replace(/^["']|["']$/g, '').trim();
-    }
-    cleaned = cleaned.replace(/[,}"']+$/, '').replace(/^["'{,]+/, '').trim();
-    return cleaned;
-  }
-
-  privateKey = cleanCredential(privateKey);
-  clientEmail = cleanCredential(clientEmail);
-  projectId = cleanCredential(projectId);
-
+  // 3. Final PEM formatting for the private key
   if (privateKey) {
     // Replace literal \n with actual newlines
     privateKey = privateKey.replace(/\\n/g, '\n');
     
-    // Ensure it has the proper PEM headers/footers if they were stripped or missing
+    // Ensure it has the proper PEM headers/footers
     if (!privateKey.includes('-----BEGIN')) {
-      const isRsa = privateKey.length > 1000; // Heuristic
-      const HEADER = isRsa ? '-----BEGIN RSA PRIVATE KEY-----' : '-----BEGIN PRIVATE KEY-----';
-      const FOOTER = isRsa ? '-----END RSA PRIVATE KEY-----' : '-----END PRIVATE KEY-----';
+      const HEADER = '-----BEGIN PRIVATE KEY-----';
+      const FOOTER = '-----END PRIVATE KEY-----';
       
+      // Remove any whitespace or characters that shouldn't be in the base64 core
       const core = privateKey.replace(/[^A-Za-z0-9+/=]/g, '');
       const lines = core.match(/.{1,64}/g);
       const wrappedCore = lines ? lines.join('\n') : core;
       privateKey = `${HEADER}\n${wrappedCore}\n${FOOTER}\n`;
     }
+  }
+
+  if (!privateKey || !clientEmail || !sheetId) {
+    throw new Error("Google Sheets credentials not configured");
   }
 
   cachedCredentials = { privateKey, clientEmail, projectId };
@@ -174,6 +155,17 @@ app.get("/api/config-check", (req, res) => {
     privateKey: !!privateKey,
     projectId: !!projectId,
     env: process.env.NODE_ENV
+  });
+});
+
+app.get("/api/debug", (req, res) => {
+  res.json({
+    GOOGLE_SHEET_ID: !!process.env.GOOGLE_SHEET_ID,
+    GOOGLE_CLIENT_EMAIL: !!process.env.GOOGLE_CLIENT_EMAIL,
+    GOOGLE_PRIVATE_KEY: !!process.env.GOOGLE_PRIVATE_KEY,
+    GOOGLE_PROJECT_ID: !!process.env.GOOGLE_PROJECT_ID,
+    ADMIN_PASSWORD: !!process.env.ADMIN_PASSWORD,
+    NODE_ENV: process.env.NODE_ENV
   });
 });
 
