@@ -477,6 +477,8 @@ const CatalogPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {classes
           .filter((item) => {
+            // Always show self-paced classes
+            if (item.type?.toLowerCase() === 'self-paced') return true;
             if (!item.date) return true;
             
             const classDate = parseDate(item.date);
@@ -516,7 +518,7 @@ const CatalogPage = () => {
             classItem={selectedClass} 
             onClose={() => setSelectedClass(null)} 
             onSuccess={() => {
-              const url = selectedClass.type.toLowerCase() === 'self-paced' ? selectedClass.webAddress : null;
+              const url = (selectedClass.type.toLowerCase() === 'self-paced' || selectedClass.type.toLowerCase() === 'virtual') ? selectedClass.webAddress : null;
               setSelectedClass(null);
               setSuccessUrl(url || null);
               setShowSuccess(true);
@@ -736,6 +738,7 @@ const AdminPage = () => {
               <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Class Name</th>
               <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Date/Time</th>
               <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Seats</th>
+              <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Web Address</th>
               <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase text-right">Actions</th>
             </tr>
           </thead>
@@ -758,6 +761,9 @@ const AdminPage = () => {
                   </td>
                   <td className="px-6 py-4 text-sm">
                     {c.type === 'Self-Paced' || c.available_seats === 'Unlimited' ? 'Unlimited' : c.available_seats}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500 truncate max-w-[150px]">
+                    {c.webAddress || '-'}
                   </td>
                   <td className="px-6 py-4 text-right space-x-2">
                     <button onClick={() => setEditingClass(c)} className="text-primary hover:underline text-sm font-bold">Edit</button>

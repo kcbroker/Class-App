@@ -172,21 +172,31 @@ app.get("/api/config-check", (req, res) => {
 app.get("/api/classes", async (req, res) => {
   try {
     const rows = await getSheetData("Classes!A:I");
-    if (!rows || rows.length <= 1) return res.json([]);
-    const data = rows.slice(1).map((row, index) => ({
-      id: index + 2,
-      name: row[0] || "",
-      description: row[1] || "",
-      date: row[2] || "",
-      time: row[3] || "",
-      location: row[4] || "",
-      type: row[5] || "In-Person",
-      instructor: row[6] || "",
-      available_seats: row[7] || 0,
-      webAddress: row[8] || ""
-    }));
+    if (!rows || rows.length <= 1) {
+      console.log("No data rows found in Classes sheet (only header or empty).");
+      return res.json([]);
+    }
+    
+    // Skip header row and filter out empty rows (where name is missing)
+    const data = rows.slice(1)
+      .filter(row => row[0] && row[0].trim() !== "")
+      .map((row, index) => ({
+        id: index + 2, // Row number in sheet (approximate)
+        name: row[0] || "",
+        description: row[1] || "",
+        date: row[2] || "",
+        time: row[3] || "",
+        location: row[4] || "",
+        type: row[5] || "In-Person",
+        instructor: row[6] || "",
+        available_seats: row[7] || "Unlimited",
+        webAddress: row[8] || ""
+      }));
+    
+    console.log(`Successfully fetched ${data.length} classes from Google Sheets.`);
     res.json(data);
   } catch (error: any) {
+    console.error("Error fetching classes:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -223,11 +233,26 @@ app.post("/api/register", async (req, res) => {
     // Email...
     const mailTransporter = getTransporter();
     if (mailTransporter) {
+      const linkHtml = webAddress ? `<p><strong>Class Link:</strong> <a href="${webAddress}">${webAddress}</a></p>` : "";
       await mailTransporter.sendMail({
         from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
         to: email,
         subject: `Registration Confirmation: ${className}`,
-        html: `<p>Hello ${agentName}, your registration for ${className} is confirmed.</p>`
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+            <h2 style="color: #d32f2f;">Registration Confirmed!</h2>
+            <p>Hello <strong>${agentName}</strong>,</p>
+            <p>You have successfully registered for <strong>${className}</strong>.</p>
+            <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>Date:</strong> ${classDate || "Self-Paced"}</p>
+              <p style="margin: 5px 0;"><strong>Time:</strong> ${classTime || "N/A"}</p>
+              ${linkHtml}
+            </div>
+            <p>We look forward to seeing you there!</p>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+            <p style="font-size: 12px; color: #999;">This is an automated confirmation from the KW Class Portal.</p>
+          </div>
+        `
       });
     }
 
@@ -242,6 +267,100 @@ app.post("/api/admin/login", (req, res) => {
     res.json({ success: true });
   } else {
     res.status(401).json({ error: "Invalid password" });
+  }
+});
+
+app.post("/api/admin/classes", async (req, res) => {
+  try {
+    const { action, classData, id, password } = req.body;
+    if (password !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: "Unauthorized" });
+    if (!SPREADSHEET_ID) throw new Error("GOOGLE_SHEET_ID not configured");
+
+    const sheets = getSheets();
+
+    if (action !== "delete") {
+      const values = [[
+        classData.name || "",
+        classData.description || "",
+        classData.date || "",
+        classData.time || "",
+        classData.location || "",
+        classData.type || "In-Person",
+        classData.instructor || "",
+        classData.available_seats || "Unlimited",
+        classData.webAddress || ""
+      ]];
+
+      if (action === "add") {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: SPREADSHEET_ID,
+          range: "Classes!A:I",
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values },
+        });
+      } else if (action === "edit") {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `Classes!A${id}:I${id}`,
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values },
+        });
+      }
+    } else if (action === "delete") {
+      const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+      const sheet = spreadsheet.data.sheets?.find((s: any) => s.properties?.title === "Classes");
+      const sheetId = sheet?.properties?.sheetId;
+
+      if (sheetId !== undefined) {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: SPREADSHEET_ID,
+          requestBody: {
+            requests: [{
+              deleteDimension: {
+                range: {
+                  sheetId: sheetId,
+                  dimension: "ROWS",
+                  startIndex: id - 1,
+                  endIndex: id
+                }
+              }
+            }]
+          }
+        });
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("Admin error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/admin/test-connection", async (req, res) => {
+  try {
+    const rows = await getSheetData("Classes!A1:A1");
+    res.json({ success: true, message: "Successfully connected to Google Sheets!", rows: rows?.length || 0 });
+  } catch (error: any) {
+    console.error("Connection test failed:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/test-email", async (req, res) => {
+  const { email } = req.body;
+  try {
+    const mailTransporter = getTransporter();
+    if (!mailTransporter) throw new Error("Email configuration missing");
+    await mailTransporter.sendMail({
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+      to: email,
+      subject: "Test Email: KW Class Portal",
+      html: "<h1>Email Configuration Successful!</h1>"
+    });
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 
