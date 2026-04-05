@@ -247,10 +247,10 @@ const RegistrationModal = ({ classItem, onClose, onSuccess }: { classItem: Class
               value={formData.marketCenter}
               onChange={e => setFormData({...formData, marketCenter: e.target.value})}
             >
-              <option>KW Kansas City North</option>
-              <option>KW Realty Partners</option>
-              <option>Keller Williams Platinum Partners</option>
-              <option>Keller Williams One Legacy Partners</option>
+              <option>Kansas City North</option>
+              <option>Realty Partners</option>
+              <option>Platinum Partners</option>
+              <option>One Legacy Partners</option>
             </select>
           </div>
 
