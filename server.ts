@@ -12,6 +12,15 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 8080;
 
+// --- Startup Check ---
+console.log("--- Environment Variable Check ---");
+console.log("GOOGLE_SHEET_ID:", process.env.GOOGLE_SHEET_ID ? "Present" : "MISSING");
+console.log("GOOGLE_CLIENT_EMAIL:", process.env.GOOGLE_CLIENT_EMAIL ? "Present" : "MISSING");
+console.log("GOOGLE_PRIVATE_KEY:", process.env.GOOGLE_PRIVATE_KEY ? "Present (Length: " + process.env.GOOGLE_PRIVATE_KEY.length + ")" : "MISSING");
+console.log("GOOGLE_PROJECT_ID:", process.env.GOOGLE_PROJECT_ID ? "Present" : "MISSING (Optional if in JSON)");
+console.log("ADMIN_PASSWORD:", process.env.ADMIN_PASSWORD ? "Present" : "MISSING");
+console.log("----------------------------------");
+
 // 1. Bind immediately to satisfy Cloud Run health check
 // This ensures the container is "ready" as soon as possible.
 app.listen(PORT, "0.0.0.0", () => {
@@ -72,21 +81,20 @@ function getCredentials() {
   projectId = cleanCredential(projectId);
 
   if (privateKey) {
-    while (privateKey.includes('\\n')) privateKey = privateKey.replace(/\\n/g, '\n');
-    while (privateKey.includes('\\r')) privateKey = privateKey.replace(/\\r/g, '\r');
-    while (privateKey.includes('\\t')) privateKey = privateKey.replace(/\\t/g, '\t');
+    // Replace literal \n with actual newlines
+    privateKey = privateKey.replace(/\\n/g, '\n');
     
-    const isRsa = privateKey.includes('RSA PRIVATE KEY');
-    const HEADER = isRsa ? '-----BEGIN RSA PRIVATE KEY-----' : '-----BEGIN PRIVATE KEY-----';
-    const FOOTER = isRsa ? '-----END RSA PRIVATE KEY-----' : '-----END PRIVATE KEY-----';
-    
-    let core = privateKey;
-    if (privateKey.includes(HEADER)) core = privateKey.split(HEADER)[1];
-    if (core.includes(FOOTER)) core = core.split(FOOTER)[0];
-    core = core.replace(/[^A-Za-z0-9+/=]/g, '');
-    const lines = core.match(/.{1,64}/g);
-    const wrappedCore = lines ? lines.join('\n') : core;
-    privateKey = `${HEADER}\n${wrappedCore}\n${FOOTER}\n`;
+    // Ensure it has the proper PEM headers/footers if they were stripped or missing
+    if (!privateKey.includes('-----BEGIN')) {
+      const isRsa = privateKey.length > 1000; // Heuristic
+      const HEADER = isRsa ? '-----BEGIN RSA PRIVATE KEY-----' : '-----BEGIN PRIVATE KEY-----';
+      const FOOTER = isRsa ? '-----END RSA PRIVATE KEY-----' : '-----END PRIVATE KEY-----';
+      
+      const core = privateKey.replace(/[^A-Za-z0-9+/=]/g, '');
+      const lines = core.match(/.{1,64}/g);
+      const wrappedCore = lines ? lines.join('\n') : core;
+      privateKey = `${HEADER}\n${wrappedCore}\n${FOOTER}\n`;
+    }
   }
 
   cachedCredentials = { privateKey, clientEmail, projectId };
