@@ -46,7 +46,7 @@ const Header = () => (
     <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 bg-primary rounded flex items-center justify-center text-white font-bold text-xl">KW</div>
-        <h1 className="text-xl font-bold tracking-tight text-gray-900">KW Classes</h1>
+        <h1 className="text-xl font-bold tracking-tight text-gray-900">Classes</h1>
       </div>
       <nav className="flex items-center gap-6">
         <a href="/" className="text-sm font-medium text-gray-600 hover:text-primary">Catalog</a>
