@@ -970,7 +970,7 @@ export default function App() {
       <footer className="bg-gray-50 border-t border-gray-100 py-12">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <div className="w-10 h-10 bg-primary rounded flex items-center justify-center text-white font-bold text-xl mx-auto mb-4">KW</div>
-          <p className="text-gray-500 text-sm">© {new Date().getFullYear()} Chris Fosgate. All rights reserved.</p>
+          <p className="text-gray-500 text-sm">© {new Date().getFullYear()} WIN Network. All rights reserved.</p>
           <p className="text-gray-400 text-[10px] mt-2 uppercase tracking-widest">Empowering Real Estate Professionals</p>
         </div>
       </footer>
